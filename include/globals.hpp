@@ -12,7 +12,7 @@
 //flipper
 #define fs_port 9
 #define fr_port 8
-#define flipperrot_port 17
+#define flipperrot_port 16
 
 //cata
 #define lc_port 3

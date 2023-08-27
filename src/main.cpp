@@ -53,7 +53,11 @@ void opcontrol() {
     pros::Motor fr(fr_port);
     pros::Rotation flipperrot(flipperrot_port);
     int flipper_state = 0;
-    double flipper_target = 270, flipper_power = 100, flipper_kp = 1, intake_power = 120, flipper_error = 0;
+    int flipper_target = 270;
+    int flipper_power = 100, intake_power = 120;
+    int flipper_kp = 2;
+    int flipper_kd = 250, flipper_error = 0, prev_flipper_error = 0, flipper_d = 0;
+    int flipper_ki = 0.001, total_flipper_error = 0;
 
     //cata motors
     pros::Motor lc(lc_port);
@@ -85,26 +89,47 @@ void opcontrol() {
 
         //flipper control
         flipper_error = flipperrot.get_position()/ 100 - flipper_target;
+        flipper_d = flipper_error - prev_flipper_error;
+        total_flipper_error += flipper_error;
+        prev_flipper_error = flipper_error;
+
+        // fs.move(flipper_error * flipper_kp + flipper_d * flipper_kd + intake_power * (master.get_digital(DIGITAL_DOWN) - master.get_digital(DIGITAL_UP))); 
+        // fr.move(-flipper_error * flipper_kp + flipper_d * flipper_kd + intake_power * (master.get_digital(DIGITAL_DOWN) - master.get_digital(DIGITAL_UP)));
+        fs.move(flipper_error * flipper_kp + total_flipper_error * flipper_ki + intake_power * (master.get_digital(DIGITAL_DOWN) - master.get_digital(DIGITAL_UP))); 
+        fr.move(-flipper_error * flipper_kp + total_flipper_error * flipper_ki + intake_power * (master.get_digital(DIGITAL_DOWN) - master.get_digital(DIGITAL_UP)));
+
         if(master.get_digital_new_press(DIGITAL_X)){
             //flipper_state = 1;
             flipper_target = 270;
-            //fs.move(flipper_error * flipper_kp);
-            fr.move(0);
         }
 
         else if(master.get_digital_new_press(DIGITAL_B)){
             //flipper_state = 2;
-            flipper_target = 300;
+            flipper_target = 190;
+            fr.move(10);
         }
-
-        //master.print(1, 1, "Flipper State: %d", flipper_state);
-        //master.print(0, 0, "Flipper Rot: %d", flipperrot.get_position());
-        // master.print(0, 0, "Flipper Error: %d", flipper_error);
-        // master.print(0, 0, "Flipper Target: %d", flipper_target);
-        master.print(0, 0, "rot:", flipperrot.get_position());
         
+        /*if(master.get_digital(DIGITAL_UP)){
+            //outake;
+            fs.move(120);
+            fr.move(100);
+        }
+        else if(master.get_digital(DIGITAL_DOWN)){
+            //intake;
+            fs.move(-120);
+            fr.move(-100);
+        }
+        else{
+            fr.move(0);
+        }*/
+       
 
-        /*
+       printf("Target: %i \n", flipper_target);
+       printf("Error: %i \n", flipper_error);
+       printf("Power: %i \n", flipper_error * flipper_kp + total_flipper_error * flipper_ki + intake_power * (master.get_digital(DIGITAL_DOWN) - master.get_digital(DIGITAL_UP)));
+
+
+       /*
         if(master.get_digital(DIGITAL_R1)){
             fs.move(100);
             fr.move(100);
