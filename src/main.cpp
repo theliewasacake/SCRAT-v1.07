@@ -23,8 +23,9 @@ void initialize() {
     pros::Rotation flipperrot(flipperrot_port);
     
     //cata
-    pros::Motor lc(lc_port, pros::E_MOTOR_GEARSET_18, false, pros::E_MOTOR_ENCODER_DEGREES);
-	pros::Motor rc(rc_port, pros::E_MOTOR_GEARSET_18, true, pros::E_MOTOR_ENCODER_DEGREES);
+    pros::Motor lc(lc_port, pros::E_MOTOR_GEARSET_18, true, pros::E_MOTOR_ENCODER_DEGREES);
+	pros::Motor rc(rc_port, pros::E_MOTOR_GEARSET_18, false, pros::E_MOTOR_ENCODER_DEGREES);
+    pros::Rotation catarot(catarot_port);
 }
 
 void disabled() {}
@@ -52,16 +53,19 @@ void opcontrol() {
     pros::Motor fs(fs_port);
     pros::Motor fr(fr_port);
     pros::Rotation flipperrot(flipperrot_port);
-    int flipper_state = 0;
     int flipper_target = 270;
     int flipper_power = 100, intake_power = 120;
-    int flipper_kp = 2;
-    int flipper_kd = 250, flipper_error = 0, prev_flipper_error = 0, flipper_d = 0;
+    int flipper_kp = 2, flipper_error = 0;
+    int flipper_kd = 250, prev_flipper_error = 0, flipper_d = 0;
     int flipper_ki = 0.001, total_flipper_error = 0;
 
     //cata motors
     pros::Motor lc(lc_port);
     pros::Motor rc(rc_port);
+    pros::Rotation catarot(catarot_port);
+    int cata_target = 210, cata_power = 50;
+    int cata_kp = 2, cata_error = 0;
+    int cata_kd = 2000, prev_cata_error = 0, cata_d = 0;
 
 	while(true){
 
@@ -93,62 +97,42 @@ void opcontrol() {
         total_flipper_error += flipper_error;
         prev_flipper_error = flipper_error;
 
-        // fs.move(flipper_error * flipper_kp + flipper_d * flipper_kd + intake_power * (master.get_digital(DIGITAL_DOWN) - master.get_digital(DIGITAL_UP))); 
-        // fr.move(-flipper_error * flipper_kp + flipper_d * flipper_kd + intake_power * (master.get_digital(DIGITAL_DOWN) - master.get_digital(DIGITAL_UP)));
         fs.move(flipper_error * flipper_kp + total_flipper_error * flipper_ki + intake_power * (master.get_digital(DIGITAL_DOWN) - master.get_digital(DIGITAL_UP))); 
         fr.move(-flipper_error * flipper_kp + total_flipper_error * flipper_ki + intake_power * (master.get_digital(DIGITAL_DOWN) - master.get_digital(DIGITAL_UP)));
 
         if(master.get_digital_new_press(DIGITAL_X)){
-            //flipper_state = 1;
+            //up position
             flipper_target = 270;
         }
 
         else if(master.get_digital_new_press(DIGITAL_B)){
-            //flipper_state = 2;
+            // down position
             flipper_target = 190;
             fr.move(10);
         }
-        
-        /*if(master.get_digital(DIGITAL_UP)){
-            //outake;
-            fs.move(120);
-            fr.move(100);
-        }
-        else if(master.get_digital(DIGITAL_DOWN)){
-            //intake;
-            fs.move(-120);
-            fr.move(-100);
-        }
-        else{
-            fr.move(0);
-        }*/
-       
 
-       printf("Target: %i \n", flipper_target);
-       printf("Error: %i \n", flipper_error);
-       printf("Power: %i \n", flipper_error * flipper_kp + total_flipper_error * flipper_ki + intake_power * (master.get_digital(DIGITAL_DOWN) - master.get_digital(DIGITAL_UP)));
-
-
-       /*
-        if(master.get_digital(DIGITAL_R1)){
-            fs.move(100);
-            fr.move(100);
-        }
-
-        else if(master.get_digital(DIGITAL_R2)){
-            fs.move(-100);
-            fr.move(-100);
-        }
-
-        else{
-            fs.move(0);
-            fr.move(0);
-        }
-        */
+        //printf("Target: %i \n", flipper_target);
+        //printf("Error: %i \n", flipper_error);
+        //printf("Power: %i \n", flipper_error * flipper_kp + total_flipper_error * flipper_ki + intake_power * (master.get_digital(DIGITAL_DOWN) - master.get_digital(DIGITAL_UP)));
         
         //cata control
-        lc.move(-70*master.get_digital(DIGITAL_L1));
-        rc.move(-70*master.get_digital(DIGITAL_L1));
+
+        /*
+        lc.move(40*master.get_digital(DIGITAL_L1));
+        rc.move(40*master.get_digital(DIGITAL_L1));
+
+        cata_error = cata_target - catarot.get_position()/100;
+        cata_d = cata_error - prev_cata_error;
+        */
+
+        // lc.move(cata_error * cata_kp + cata_d * cata_kd + cata_power);
+        // rc.move(cata_error * cata_kp + cata_d * cata_kd + cata_power);
+
+        /*
+        printf("Position: %i \n", catarot.get_position()/100);
+        printf("Error: %i \n", cata_error);
+        */
+
 
         pros::delay(5);
 	}

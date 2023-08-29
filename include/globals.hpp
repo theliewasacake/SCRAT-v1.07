@@ -17,5 +17,6 @@
 //cata
 #define lc_port 3
 #define rc_port 14
+#define catarot_port 18
 
 #endif
