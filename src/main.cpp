@@ -26,6 +26,10 @@ void initialize() {
     pros::Motor lc(lc_port, pros::E_MOTOR_GEARSET_18, true, pros::E_MOTOR_ENCODER_DEGREES);
 	pros::Motor rc(rc_port, pros::E_MOTOR_GEARSET_18, false, pros::E_MOTOR_ENCODER_DEGREES);
     pros::Rotation catarot(catarot_port);
+
+    //side rollers
+    pros::Motor lr (lr_port, pros::E_MOTOR_GEARSET_18, true, pros::E_MOTOR_ENCODER_DEGREES);
+    pros::Motor rr (lr_port, pros::E_MOTOR_GEARSET_18, true, pros::E_MOTOR_ENCODER_DEGREES);
 }
 
 void disabled() {}
@@ -66,6 +70,10 @@ void opcontrol() {
     int cata_target = 210, cata_power = 50;
     int cata_kp = 2, cata_error = 0;
     int cata_kd = 2000, prev_cata_error = 0, cata_d = 0;
+
+    //side rollers motors
+    pros::Motor lr(lr_port);
+    pros::Motor rr(rr_port);
 
 	while(true){
 
@@ -116,14 +124,25 @@ void opcontrol() {
         //printf("Power: %i \n", flipper_error * flipper_kp + total_flipper_error * flipper_ki + intake_power * (master.get_digital(DIGITAL_DOWN) - master.get_digital(DIGITAL_UP)));
         
         //cata control
+        lc.move(60*master.get_digital(DIGITAL_L1));
+        rc.move(60*master.get_digital(DIGITAL_L1));
 
-        /*
-        lc.move(40*master.get_digital(DIGITAL_L1));
-        rc.move(40*master.get_digital(DIGITAL_L1));
+        if(master.get_digital(DIGITAL_LEFT)){
+            lc.move(60);
+            rc.move(60);
+            pros::delay(15);
+            lc.move(-2);
+            rc.move(-2);
+        }
+
+        else {
+            lc.move(0);
+            rc.move(0);
+        }
 
         cata_error = cata_target - catarot.get_position()/100;
         cata_d = cata_error - prev_cata_error;
-        */
+        
 
         // lc.move(cata_error * cata_kp + cata_d * cata_kd + cata_power);
         // rc.move(cata_error * cata_kp + cata_d * cata_kd + cata_power);
@@ -132,6 +151,10 @@ void opcontrol() {
         printf("Position: %i \n", catarot.get_position()/100);
         printf("Error: %i \n", cata_error);
         */
+
+        //side rollers control
+        lr.move(100 * (master.get_digital(DIGITAL_R2) - master.get_digital(DIGITAL_R1)));
+        rr.move(100 * (master.get_digital(DIGITAL_R2) - master.get_digital(DIGITAL_R1)));
 
 
         pros::delay(5);

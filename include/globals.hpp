@@ -19,4 +19,8 @@
 #define rc_port 14
 #define catarot_port 18
 
+//side rollers
+#define lr_port 7
+#define rr_port 18
+
 #endif
