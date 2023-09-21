@@ -3,24 +3,25 @@
 
 //base
 #define lf_port 10
-#define lt_port 20
-#define lb_port 19
-#define rf_port 2
-#define rt_port 13
-#define rb_port 15
+#define lt_port 6
+#define lb_port 8
+#define rf_port 20
+#define rt_port 19
+#define rb_port 18
+#define imu_port 9
 
 //flipper
-#define fs_port 9
-#define fr_port 8
-#define flipperrot_port 16
+#define fs_port 5
+#define fr_port 4
+#define flipperrot_port 15
 
 //cata
-#define lc_port 3
-#define rc_port 14
-#define catarot_port 18
+#define lc_port 7
+#define rc_port 17
+#define catarot_port 12
 
 //side rollers
-#define lr_port 7
-#define rr_port 18
+#define lr_port 2
+#define rr_port 11
 
 #endif
