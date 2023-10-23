@@ -4,6 +4,23 @@
 #include "pros/misc.h"
 #include "pros/motors.h"
 
+#define flipper_targetUp 240
+#define flipper_targetDown 320
+#define flipper_kp 2
+#define flipper_kd 250
+#define flipper_ki 0.001
+#define RpmToRad 3.141 / 60
+#define RadToRpm 60 / 3.141
+#define FlipperMotorMaxRPM 100
+#define decelConstant 0.0002
+
+#define cata_kp 4
+#define cata_kd 0
+#define Catadelay 400
+#define allowedError 2
+#define cata_target 214
+#define cata_power 50
+
 void initialize() {
 
     //controller
@@ -23,10 +40,10 @@ void initialize() {
     pros::Rotation flipperrot(flipperrot_port);
     
     //cata
-    pros::Motor lc(lc_port, pros::E_MOTOR_GEARSET_18, true, pros::E_MOTOR_ENCODER_DEGREES);
-	pros::Motor rc(rc_port, pros::E_MOTOR_GEARSET_18, false, pros::E_MOTOR_ENCODER_DEGREES);
-    lc.set_brake_mode(pros::E_MOTOR_BRAKE_HOLD);
-    rc.set_brake_mode(pros::E_MOTOR_BRAKE_HOLD);
+    pros::Motor lc(lc_port, pros::E_MOTOR_GEARSET_36, true, pros::E_MOTOR_ENCODER_DEGREES);
+	pros::Motor rc(rc_port, pros::E_MOTOR_GEARSET_36, false, pros::E_MOTOR_ENCODER_DEGREES);
+    // lc.set_brake_mode(pros::E_MOTOR_BRAKE_HOLD);
+    // rc.set_brake_mode(pros::E_MOTOR_BRAKE_HOLD);
     pros::Rotation catarot(catarot_port);
 
     //side rollers
@@ -39,6 +56,7 @@ void disabled() {}
 void competition_initialize() {}
 
 void autonomous() {}
+
 
 void opcontrol() {
 	//controller
@@ -59,21 +77,32 @@ void opcontrol() {
     pros::Motor fs(fs_port);
     pros::Motor fr(fr_port);
     pros::Rotation flipperrot(flipperrot_port);
-    int flipper_target = 270;
-    int flipper_power = 100, intake_power = 120;
-    int flipper_kp = 2, flipper_error = 0;
-    int flipper_kd = 250, prev_flipper_error = 0, flipper_d = 0;
-    int flipper_ki = 0.001, total_flipper_error = 0;
+
+    bool flipperPosUp = true; //false means down, true means up
+    int flipper_target;
+    float flipper_error;
+    float prev_flipper_error;
+    float flipper_d;
+    float total_flipper_error;
+
+    //variables for 2131 transmission inverse functions
+    float TargetOmegaI = 0.0;
+    float TargetOmegaA = 0.0;
+    float TargetOmegaFS;
+    float TargetOmegaFR;
 
     //cata motors
     pros::Motor lc(lc_port);
     pros::Motor rc(rc_port);
     pros::Rotation catarot(catarot_port);
-    int cata_target = 210, cata_power = 50;
-    int cata_kp = 1, cata_error = 0;
-    int cata_kd = 2000, prev_cata_error = 0, cata_d = 0;
 
-    //side rollers motors
+    int cata_error;
+    int prev_cata_error;
+    int cata_d;
+    uint32_t timestamp;
+    int correctingPow;
+
+    //side rollers motor
     pros::Motor lr(lr_port);
     pros::Motor rr(rr_port);
 
@@ -102,70 +131,77 @@ void opcontrol() {
         rb_base.move(right);
 
         //flipper control
-        flipper_error = flipperrot.get_position()/ 100 - flipper_target;
-        flipper_d = flipper_error - prev_flipper_error;
-        total_flipper_error += flipper_error;
-        prev_flipper_error = flipper_error;
 
-        fs.move(flipper_error * flipper_kp + total_flipper_error * flipper_ki + intake_power * (master.get_digital(DIGITAL_DOWN) - master.get_digital(DIGITAL_UP))); 
-        fr.move(-flipper_error * flipper_kp + total_flipper_error * flipper_ki + intake_power * (master.get_digital(DIGITAL_DOWN) - master.get_digital(DIGITAL_UP)));
+        //update target speeds for I and update target position for flipper
+        if(master.get_digital_new_press(DIGITAL_X))
+            flipper_target = flipper_targetUp; //move to up position
+        else if(master.get_digital_new_press(DIGITAL_B))
+            flipper_target = flipper_targetDown; //move to down position
+        if(master.get_digital_new_press(DIGITAL_DOWN))
+            TargetOmegaI = -5.236; //roller outtake
+        else if(master.get_digital_new_press(DIGITAL_UP))
+            TargetOmegaI = 5.236; //roller intake
 
-        if(master.get_digital_new_press(DIGITAL_X)){
-            //up position
-            flipper_target = 270;
-        }
-
-        else if(master.get_digital_new_press(DIGITAL_B)){
-            // down position
-            flipper_target = 190;
-            fr.move(10);
-        }
-
-        //printf("Target: %i \n", flipper_target);
-        //printf("Error: %i \n", flipper_error);
-        //printf("Power: %i \n", flipper_error * flipper_kp + total_flipper_error * flipper_ki + intake_power * (master.get_digital(DIGITAL_DOWN) - master.get_digital(DIGITAL_UP)));
         
-        //cata control
+
+        //PID loop to get the arm to the target position
+        //calculates TargetOmegaA, and ActualOmegaFS will be changed according to the PID loop in order to reach the target encoder value given by flipper_target
+        flipper_error = flipperrot.get_position() / 100 - flipper_target;
+
+        //finding target rotation rate of the arm in rad/s
+        TargetOmegaA = flipper_error * decelConstant * RadToRpm;
+        printf("flippereror: %f \n", flipper_error);
+
+        //calculate required input speeds of motors to get desired transmission output config in rad/s
+        TargetOmegaFS = (TargetOmegaA + TargetOmegaI) * (float) 5.0; 
+        TargetOmegaFR = TargetOmegaI * (float) 5.0;
+
+        //convert TargetOmegaFS and TargetOmegaFR from rad/s to rpm
+        TargetOmegaFR = TargetOmegaFR * RadToRpm;
+        TargetOmegaFS = TargetOmegaFS * RadToRpm;
+        printf("tOmegaA: %f \n", TargetOmegaA);
+        printf("tOmegaFS: %f \n", TargetOmegaFS);
+        printf("tOmegaFR: %f \n", TargetOmegaFR);
+
+        fs.move_velocity(TargetOmegaFS);
+        fr.move_velocity(TargetOmegaFR);
+
         
-        /*
-        lc.move(60*master.get_digital(DIGITAL_L1));
-        rc.move(60*master.get_digital(DIGITAL_L1));
-        */
-
-        /*
-        if(master.get_digital(DIGITAL_LEFT)){
-            lc.move(60);
-            rc.move(60);
-            // pros::delay(15);
-            // lc.move(-2);
-            // rc.move(-2);
-        }
-
-        else {
-            lc.move(0);
-            rc.move(0);
-        }
-        */
-
+        
+        
+        //updating values of these global variables
         cata_error = cata_target - catarot.get_position()/100;
         cata_d = cata_error - prev_cata_error;
+        correctingPow = cata_error * cata_kp + cata_d * cata_kd + cata_power;
         
-        /*lastest cata control
-        if (master.get_digital(DIGITAL_L1)){
-            lc.move(50);
-            rc.move(50);
+        // latest cata control
+        if(master.get_digital(DIGITAL_L2)){
+            lc.move(30);
+            rc.move(30);
+            timestamp = pros::millis();
         }
         
-        else{
-            lc.move(cata_error * cata_kp + cata_d * cata_kd + cata_power);
-            rc.move(cata_error * cata_kp + cata_d * cata_kd + cata_power);
-        }
-        */
+        else if(pros::millis() - timestamp > Catadelay){
+            //delay is time taken for catapult arm to fully fire
+            //timestamp records the moment from which the catapult began spinning and the slip gear slips
+            //after some delay, the catapult has fired and the slip gear can then begin to rewind
+            if(catarot.get_position() > cata_target //if we are still undershooting
+            && abs(cata_error) > allowedError){ //magnitude of catapult error is greater than allowed error
+                lc.move(correctingPow);
+                rc.move(correctingPow);
+            }
 
-        /*
-        printf("Position: %i \n", catarot.get_position()/100);
-        printf("Error: %i \n", cata_error);
-        */
+            else{
+                lc.move(0);
+                rc.move(0);
+            }
+        }
+        
+        //cata debugging
+        // printf("Position: %i \n", catarot.get_position()/100);
+        // printf("Error: %i \n", cata_error);
+        // printf("CorrectingPow: %i \n", correctingPow);
+        // printf("Current: %i \n", lc.get_current_draw());
 
         //side rollers control
         lr.move(100 * (master.get_digital(DIGITAL_R2) - master.get_digital(DIGITAL_R1)));
