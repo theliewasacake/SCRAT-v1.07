@@ -4,15 +4,13 @@
 #include "pros/misc.h"
 #include "pros/motors.h"
 
-#define flipper_targetUp 240
-#define flipper_targetDown 320
+#define flipper_targetUp 240 //degrees
+#define flipper_targetDown 320 //degrees
 #define flipper_kp 2
 #define flipper_kd 250
 #define flipper_ki 0.001
 #define RpmToRad 3.141 / 60
 #define RadToRpm 60 / 3.141
-#define FlipperMotorMaxRPM 100
-#define decelConstant 0.0002
 
 #define cata_kp 4
 #define cata_kd 0
@@ -36,7 +34,7 @@ void initialize() {
 
     //flipper
     pros::Motor fs(fs_port, pros::E_MOTOR_GEARSET_36, false, pros::E_MOTOR_ENCODER_DEGREES);
-	pros::Motor fr(fr_port, pros::E_MOTOR_GEARSET_36, false, pros::E_MOTOR_ENCODER_DEGREES);
+	pros::Motor fr(fr_port, pros::E_MOTOR_GEARSET_36, true, pros::E_MOTOR_ENCODER_DEGREES);
     pros::Rotation flipperrot(flipperrot_port);
     
     //cata
@@ -78,18 +76,20 @@ void opcontrol() {
     pros::Motor fr(fr_port);
     pros::Rotation flipperrot(flipperrot_port);
 
-    bool flipperPosUp = true; //false means down, true means up
-    int flipper_target;
+
+    bool IntakeTargetPosUp = true;
     float flipper_error;
     float prev_flipper_error;
     float flipper_d;
     float total_flipper_error;
 
     //variables for 2131 transmission inverse functions
-    float TargetOmegaI = 0.0;
-    float TargetOmegaA = 0.0;
-    float TargetOmegaFS;
-    float TargetOmegaFR;
+    float TargetRollerRPM;
+    float TargetArmRPM;
+    float OmegaBP; //BP is the motor on the arm because the transmission is upside down
+    float OmegaAP; //AP is the motor on the base because the transmission is upside down
+    float TargetOmegaA;
+    float prevflipper_error;
 
     //cata motors
     pros::Motor lc(lc_port);
@@ -134,40 +134,39 @@ void opcontrol() {
 
         //update target speeds for I and update target position for flipper
         if(master.get_digital_new_press(DIGITAL_X))
-            flipper_target = flipper_targetUp; //move to up position
+            IntakeTargetPosUp = true; //move to up position
         else if(master.get_digital_new_press(DIGITAL_B))
-            flipper_target = flipper_targetDown; //move to down position
+            IntakeTargetPosUp = false; //move to down position
+
         if(master.get_digital_new_press(DIGITAL_DOWN))
-            TargetOmegaI = -5.236; //roller outtake
+            TargetRollerRPM = -500;//roller outtake
         else if(master.get_digital_new_press(DIGITAL_UP))
-            TargetOmegaI = 5.236; //roller intake
+            TargetRollerRPM = 500; //roller intake
 
-        
-
+        int currentPos = flipperrot.get_position() / 100;
         //PID loop to get the arm to the target position
         //calculates TargetOmegaA, and ActualOmegaFS will be changed according to the PID loop in order to reach the target encoder value given by flipper_target
-        flipper_error = flipperrot.get_position() / 100 - flipper_target;
-
-        //finding target rotation rate of the arm in rad/s
-        TargetOmegaA = flipper_error * decelConstant * RadToRpm;
-        printf("flippereror: %f \n", flipper_error);
-
-        //calculate required input speeds of motors to get desired transmission output config in rad/s
-        TargetOmegaFS = (TargetOmegaA + TargetOmegaI) * (float) 5.0; 
-        TargetOmegaFR = TargetOmegaI * (float) 5.0;
-
-        //convert TargetOmegaFS and TargetOmegaFR from rad/s to rpm
-        TargetOmegaFR = TargetOmegaFR * RadToRpm;
-        TargetOmegaFS = TargetOmegaFS * RadToRpm;
-        printf("tOmegaA: %f \n", TargetOmegaA);
-        printf("tOmegaFS: %f \n", TargetOmegaFS);
-        printf("tOmegaFR: %f \n", TargetOmegaFR);
-
-        fs.move_velocity(TargetOmegaFS);
-        fr.move_velocity(TargetOmegaFR);
-
         
+        if(IntakeTargetPosUp)
+            flipper_error = currentPos - flipper_targetUp;
+        else
+            flipper_error = currentPos - flipper_targetDown;
+
+        prev_flipper_error = flipper_error;
+
+        TargetOmegaA = flipper_error * flipper_kp + prev_flipper_error * flipper_kd;
+
+        OmegaBP = -TargetRollerRPM / 5;
+        OmegaAP = (TargetOmegaA + 0.2 * OmegaBP) * 5;
+
+        fs.move_velocity(OmegaAP);
+        fr.move_velocity(OmegaBP);
         
+        printf("TargetRollerRPM: %f \n", TargetRollerRPM);
+        printf("TargetOmegaA: %f \n", TargetOmegaA);
+        printf("OmegaAP: %f \n", OmegaAP);
+        printf("OmegaBP: %f \n", OmegaBP);
+
         
         //updating values of these global variables
         cata_error = cata_target - catarot.get_position()/100;
