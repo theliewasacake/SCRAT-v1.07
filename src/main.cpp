@@ -24,22 +24,24 @@ void initialize() {
     //controller
     pros::Controller master(CONTROLLER_MASTER);
 
-	//base
+  //base
     pros::Motor lf_base(lf_port, pros::E_MOTOR_GEARSET_06, true, pros::E_MOTOR_ENCODER_DEGREES);
-	pros::Motor lt_base(lt_port, pros::E_MOTOR_GEARSET_06, true, pros::E_MOTOR_ENCODER_DEGREES);
-	pros::Motor lb_base(lb_port, pros::E_MOTOR_GEARSET_06, false, pros::E_MOTOR_ENCODER_DEGREES);
-	pros::Motor rf_base(rf_port, pros::E_MOTOR_GEARSET_06, false, pros::E_MOTOR_ENCODER_DEGREES);
-	pros::Motor rt_base(rt_port, pros::E_MOTOR_GEARSET_06, false, pros::E_MOTOR_ENCODER_DEGREES);
-	pros::Motor rb_base(rb_port, pros::E_MOTOR_GEARSET_06, true, pros::E_MOTOR_ENCODER_DEGREES);
+  pros::Motor lt_base(lt_port, pros::E_MOTOR_GEARSET_06, true, pros::E_MOTOR_ENCODER_DEGREES);
+  pros::Motor lb_base(lb_port, pros::E_MOTOR_GEARSET_06, false, pros::E_MOTOR_ENCODER_DEGREES);
+  pros::Motor rf_base(rf_port, pros::E_MOTOR_GEARSET_06, false, pros::E_MOTOR_ENCODER_DEGREES);
+  pros::Motor rt_base(rt_port, pros::E_MOTOR_GEARSET_06, false, pros::E_MOTOR_ENCODER_DEGREES);
+  pros::Motor rb_base(rb_port, pros::E_MOTOR_GEARSET_06, true, pros::E_MOTOR_ENCODER_DEGREES);
 
+    pros::Motor_Group l_base({lb_base,lt_base,lf_base});
+    pros::Motor_Group r_base({rb_base,rt_base,rf_base});
     //flipper
     pros::Motor fs(fs_port, pros::E_MOTOR_GEARSET_36, false, pros::E_MOTOR_ENCODER_DEGREES);
-	pros::Motor fr(fr_port, pros::E_MOTOR_GEARSET_36, true, pros::E_MOTOR_ENCODER_DEGREES);
+  pros::Motor fr(fr_port, pros::E_MOTOR_GEARSET_36, true, pros::E_MOTOR_ENCODER_DEGREES);
     pros::Rotation flipperrot(flipperrot_port);
     
     //cata
     pros::Motor lc(lc_port, pros::E_MOTOR_GEARSET_36, true, pros::E_MOTOR_ENCODER_DEGREES);
-	pros::Motor rc(rc_port, pros::E_MOTOR_GEARSET_36, false, pros::E_MOTOR_ENCODER_DEGREES);
+  pros::Motor rc(rc_port, pros::E_MOTOR_GEARSET_36, false, pros::E_MOTOR_ENCODER_DEGREES);
     // lc.set_brake_mode(pros::E_MOTOR_BRAKE_HOLD);
     // rc.set_brake_mode(pros::E_MOTOR_BRAKE_HOLD);
     pros::Rotation catarot(catarot_port);
@@ -47,6 +49,109 @@ void initialize() {
     //side rollers
     pros::Motor lr (lr_port, pros::E_MOTOR_GEARSET_18, true, pros::E_MOTOR_ENCODER_DEGREES);
     pros::Motor rr (lr_port, pros::E_MOTOR_GEARSET_18, true, pros::E_MOTOR_ENCODER_DEGREES);
+}
+
+void move_pid(pros::Motor_Group* l_motors, pros::Motor_Group* r_motors, double t_distance_l, double t_distance_r){
+    const double kp = 1.0;
+    const double ki = 0.0;
+    const double kd = 15.0;
+    double pos_l = l_motors->get_positions().back();
+    t_distance_l += pos_l;
+    bool at_target = false;
+    double error_l = t_distance_l - pos_l;
+    double prev_error_l = t_distance_l - pos_l;
+    double integral_l = 0.0;
+    double p_term_l;
+    double i_term_l;
+    double d_term_l;
+    double out_l;
+
+    double pos_r = r_motors->get_positions().back(); 
+    t_distance_r += pos_r;
+    double error_r = t_distance_r - pos_r;
+    double prev_error_r = t_distance_r - pos_r;
+    double integral_r = 0.0;
+    double p_term_r;
+    double i_term_r;
+    double d_term_r;
+    double out_r;
+    while (!at_target){
+        pos_l = l_motors->get_positions().back();
+        pos_r = r_motors->get_positions().back(); 
+        prev_error_l = error_l;
+        prev_error_r = error_r;
+        error_l = t_distance_l - pos_l;
+        error_r = t_distance_r - pos_r; 
+        if (error_l <= 1.0 && error_r<=1.0){
+            double v_l = l_motors->get_actual_velocities().back();
+            double v_r = r_motors->get_actual_velocities().back();
+            if(v_l<1.0 && v_r<1.0){
+                at_target =true;
+                break;
+            }
+        }
+        p_term_l = kp * error_l;
+        integral_l += error_l;
+        i_term_l = ki * integral_l;
+        d_term_l = kd * (error_l - prev_error_l);
+        out_l = p_term_l+i_term_l+d_term_l;
+
+        p_term_r = kp * error_r;
+        integral_r += error_r;
+        i_term_r = ki * integral_r;
+        d_term_r = kd * (error_r - prev_error_r);
+        out_r = p_term_r+i_term_r+d_term_r;
+        printf("outl=%f, outr=%f | ", out_l, out_r);
+        int out_l_int = (out_l>127.0)?127:(out_l<-127.0)?-127:(int) out_l;
+        int out_r_int = (out_r>127.0)?127:(out_r<-127.0)?-127:(int) out_r;
+        printf("outlint=%d, outrint=%d \n", out_l_int, out_r_int);
+        l_motors->move(out_l_int);
+        r_motors->move(out_r_int);
+        pros::delay(5);
+    }
+}
+
+void move_line(double dist){
+    //base motors
+  pros::Motor lf_base(lf_port);
+  pros::Motor lt_base(lt_port);
+  pros::Motor lb_base(lb_port);
+  pros::Motor rf_base(rf_port);
+  pros::Motor rt_base(rt_port);
+  pros::Motor rb_base(rb_port);
+    
+    pros::Motor_Group l_base({lb_base,lt_base,lf_base});
+    pros::Motor_Group r_base({rb_base,rt_base,rf_base});
+
+    const double pi = 3.1415926535897932;
+    double rot = dist/(2.75*25.48*pi)*360;
+    move_pid(&l_base, &r_base, rot, rot);
+    pros::delay(10);
+}
+
+void move_turn(double theta){
+    //base motors
+  pros::Motor lf_base(lf_port);
+  pros::Motor lt_base(lt_port);
+  pros::Motor lb_base(lb_port);
+  pros::Motor rf_base(rf_port);
+  pros::Motor rt_base(rt_port);
+  pros::Motor rb_base(rb_port);
+    
+    pros::Motor_Group l_base({lb_base,lt_base,lf_base});
+    pros::Motor_Group r_base({rb_base,rt_base,rf_base});
+
+    const double pi = 3.1415926535897932;
+    const double base_width = 310.0;
+    double l_rot = (base_width*(theta*2.0*pi/360.0)/2.0)/(2.75*25.48*pi)*360.0;
+    
+    printf("L_ROT = %f\n", l_rot);
+    double r_rot = -l_rot;
+    printf("R_ROT = %f\n", r_rot);
+    move_pid(&l_base, &r_base, l_rot, r_rot);
+    printf("fuck\n");
+
+    pros::delay(10);
 }
 
 void disabled() {}
@@ -57,19 +162,22 @@ void autonomous() {}
 
 
 void opcontrol() {
-	//controller
+  //controller
     pros::Controller master(CONTROLLER_MASTER);
 
-	//base motors
-	pros::Motor lf_base(lf_port);
-	pros::Motor lt_base(lt_port);
-	pros::Motor lb_base(lb_port);
-	pros::Motor rf_base(rf_port);
-	pros::Motor rt_base(rt_port);
-	pros::Motor rb_base(rb_port);
+  //base motors
+  pros::Motor lf_base(lf_port);
+  pros::Motor lt_base(lt_port);
+  pros::Motor lb_base(lb_port);
+  pros::Motor rf_base(rf_port);
+  pros::Motor rt_base(rt_port);
+  pros::Motor rb_base(rb_port);
+    
+    pros::Motor_Group l_base({lb_base,lt_base,lf_base});
+    pros::Motor_Group r_base({rb_base,rt_base,rf_base});
 
-	//drive mode control
-	bool tankdrive = true;
+  //drive mode control
+  bool tankdrive = true;
 
     //flipper motors
     pros::Motor fs(fs_port);
@@ -105,10 +213,27 @@ void opcontrol() {
     //side rollers motor
     pros::Motor lr(lr_port);
     pros::Motor rr(rr_port);
+    
+    //Auton test code
+    /*
+    double dist = 600.0;
+    const double pi = 3.1415926535897932;
+    double l_rot = dist/(2.75*25.48*pi)*360;
+    double r_rot = dist/(2.75*25.48*pi)*360;*/
+    move_pid(&l_base, &r_base, -500, -500);
 
-	while(true){
-
-        //base control
+    move_line(600.0);
+    printf("+600\n");
+    pros::delay(1000);
+    move_line(-600.0);
+    printf("-600\n");
+    pros::delay(1000);
+    move_turn(30);
+    
+    printf("30\n");
+    
+    pros::delay(1000);
+  while(true){//base control
         double left, right;
         if(master.get_digital_new_press(DIGITAL_Y)) tankdrive = !tankdrive;
         if(tankdrive) {
@@ -208,5 +333,5 @@ void opcontrol() {
 
 
         pros::delay(5);
-	}
+  }
 }
